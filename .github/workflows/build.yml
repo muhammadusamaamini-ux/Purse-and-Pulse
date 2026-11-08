@@ -1,0 +1,43 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build the app
+        run: gradle assembleRelease --no-daemon
+
+      - name: Name the APK
+        run: cp app/build/outputs/apk/release/app-release.apk PurseAndPulse-v1.0.${{ github.run_number }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PurseAndPulse-v1.0.${{ github.run_number }}
+          path: PurseAndPulse-v1.0.${{ github.run_number }}.apk
+
+      - name: Publish a release you can download on your phone
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Purse & Pulse v1.0.${{ github.run_number }}
+          body: Download the .apk file below on your phone and open it to install or update.
+          files: PurseAndPulse-v1.0.${{ github.run_number }}.apk
