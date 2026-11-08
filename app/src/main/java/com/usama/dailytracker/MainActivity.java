@@ -1,6 +1,12 @@
 package com.usama.dailytracker;
 
 import android.app.Activity;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.content.pm.PackageInfo;
+import android.os.Build;
+import android.os.Environment;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -34,6 +40,9 @@ public class MainActivity extends Activity {
 
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
+    private long updateDownloadId = -1;
+    private String updateFileName = null;
+    private BroadcastReceiver downloadReceiver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -111,6 +120,26 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onDestroy() {
+        if (downloadReceiver != null) {
+            try { unregisterReceiver(downloadReceiver); } catch (Exception ignored) { }
+        }
+        super.onDestroy();
+    }
+
+    private void js(String code) {
+        runOnUiThread(() -> { if (web != null) web.evaluateJavascript(code, null); });
+    }
+
+    private void installDownloaded(File f) {
+        Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", f);
+        Intent i = new Intent(Intent.ACTION_VIEW);
+        i.setDataAndType(uri, "application/vnd.android.package-archive");
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
+    }
+
+    @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         web.saveState(outState);
@@ -129,6 +158,75 @@ public class MainActivity extends Activity {
 
     /** Small helpers the page can call as window.Android.*. */
     private class Bridge {
+        @JavascriptInterface
+        public String appVersionName() {
+            try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
+            catch (Exception e) { return "?"; }
+        }
+
+        @JavascriptInterface
+        @SuppressWarnings("deprecation")
+        public int appVersionCode() {
+            try {
+                PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+                return Build.VERSION.SDK_INT >= 28 ? (int) pi.getLongVersionCode() : pi.versionCode;
+            } catch (Exception e) { return 0; }
+        }
+
+        @JavascriptInterface
+        public void openUrl(String url) {
+            try {
+                Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Exception ignored) { }
+        }
+
+        /** Download the new APK inside the app, then open Android's installer. */
+        @JavascriptInterface
+        public void downloadUpdate(String url, String fileName) {
+            runOnUiThread(() -> {
+                try {
+                    String name = fileName.replaceAll("[^A-Za-z0-9._-]", "_");
+                    File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                    File old = new File(dir, name);
+                    if (old.exists()) old.delete();
+                    DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                    DownloadManager.Request r = new DownloadManager.Request(Uri.parse(url));
+                    r.setTitle("Purse & Pulse update");
+                    r.setMimeType("application/vnd.android.package-archive");
+                    r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    r.setDestinationInExternalFilesDir(MainActivity.this, Environment.DIRECTORY_DOWNLOADS, name);
+                    updateFileName = name;
+                    if (downloadReceiver == null) {
+                        downloadReceiver = new BroadcastReceiver() {
+                            @Override
+                            public void onReceive(Context c, Intent intent) {
+                                long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+                                if (id != updateDownloadId) return;
+                                File f = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), updateFileName);
+                                if (f.exists() && f.length() > 0) {
+                                    js("window.ppUpdateReady&&ppUpdateReady()");
+                                    try { installDownloaded(f); } catch (Exception e) { js("window.ppUpdateFailed&&ppUpdateFailed()"); }
+                                } else {
+                                    js("window.ppUpdateFailed&&ppUpdateFailed()");
+                                }
+                            }
+                        };
+                        IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+                        if (Build.VERSION.SDK_INT >= 33) {
+                            registerReceiver(downloadReceiver, filter, Context.RECEIVER_EXPORTED);
+                        } else {
+                            registerReceiver(downloadReceiver, filter);
+                        }
+                    }
+                    updateDownloadId = dm.enqueue(r);
+                } catch (Exception e) {
+                    js("window.ppUpdateFailed&&ppUpdateFailed()");
+                }
+            });
+        }
+
         @JavascriptInterface
         public void copyText(String text) {
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);

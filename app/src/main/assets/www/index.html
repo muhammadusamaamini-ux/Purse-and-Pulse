@@ -423,7 +423,7 @@ function render(){
   if(!UI.locked)migrateSav();
   if(UI.locked){$('#fab').hidden=true;$('#main').innerHTML=`<div class="card empty"><h3>Opening your data…</h3><p class="small muted">Checking which account is signed in.</p></div>`;return}
   const sub=`<div class="subtabs" role="tablist">${AREAS[area].map(([k,l])=>`<button role="tab" data-act="sub" data-v="${k}" class="${k===UI.tab?'on':''}">${l}</button>`).join('')}</div>`;
-  $('#main').innerHTML=sub+({habits:vHabits,insights:vInsights,money:vMoney,macc:vAccounts,loans:vLoans,reports:vReports,tlist:vTaskList,tboard:vBoard,tcal:vCal})[UI.tab]();
+  $('#main').innerHTML=sub+updBanner()+({habits:vHabits,insights:vInsights,money:vMoney,macc:vAccounts,loans:vLoans,reports:vReports,tlist:vTaskList,tboard:vBoard,tcal:vCal})[UI.tab]();
 }
 function sampleBanner(){const has=S.habits.list.some(h=>h.sample)||allTx().some(t=>t.sample);
   return has?`<div class="card row" style="background:var(--warm-soft);border-color:transparent"><span class="grow small" style="min-width:0"><b style="color:var(--warm)">Sample data.</b> Example entries to show the charts.</span><button class="btn sm ghost" data-act="clearSample">Remove</button></div>`:''}
@@ -599,6 +599,26 @@ function sampleTasks(){const d=n=>dkey(addDays(today(),n));const L=S.tasks.lists
   [['Revise concrete mix design notes',li(1),'high','doing',0,[['Water-cement ratio',true],['Slump test',false],['Admixtures',false]]],['Solve 20 MCQs on soil mechanics',li(1),'normal','todo',1,[]],['Pay electricity bill',li(0),'urgent','todo',-1,[]],['Buy groceries for the week',li(0),'normal','todo',2,[['Atta',false],['Daal',false],['Vegetables',false]]],['Send weekly report',li(2),'high','todo',3,[]],['Call the bank about the card',li(0),'low','todo',null,[]],['Past paper 2024',li(1),'normal','done',-2,[]]]
    .forEach(([title,list,pri,status,dn,ck],i)=>S.tasks.items.push({id:uid(),title,list,pri,status,due:dn==null?'':d(dn),desc:'',checks:ck.map(([t,dd])=>({t,d:dd})),created:Date.now()+i,doneAt:status==='done'?Date.now():undefined,sample:true}));
   save('tasks');toast('Sample tasks loaded')}
+
+/* ---------- updates: check GitHub for a newer version and install it ---------- */
+const PP_REPO='muhammadusamaamini-ux/Purse-and-Pulse';
+function appVer(){try{return window.Android&&Android.appVersionName?{name:Android.appVersionName(),code:Android.appVersionCode()}:null}catch(e){return null}}
+function updBanner(){const u=UI.update;return u?`<div class="card row" style="background:var(--accent-soft);border-color:transparent"><span class="grow small" style="min-width:0"><b>Version ${esc(u.name)} is ready.</b> Your data stays as it is.</span><button class="btn sm" data-act="doUpdate">Update</button></div>`:''}
+async function checkUpdate(manual){const v=appVer();if(!v)return;
+  const st=()=>document.getElementById('upd-status');if(manual&&st())st().textContent='Checking…';
+  try{const r=await fetch('https://api.github.com/repos/'+PP_REPO+'/releases/latest',{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();const n=parseInt(String(d.tag_name||'').split('.').pop(),10);const a=(d.assets||[]).find(x=>/\.apk$/i.test(x.name));
+    UI.update=(n>v.code&&a)?{code:n,name:String(d.tag_name).replace(/^v/,''),url:a.browser_download_url,file:a.name}:null;
+    try{localStorage.setItem('pp-upd-checked',String(Date.now()));localStorage.setItem('pp-upd',JSON.stringify(UI.update))}catch(e){}
+    if(manual){if(st())st().textContent=UI.update?'Version '+UI.update.name+' is available.':'You have the latest version.';toast(UI.update?'Version '+UI.update.name+' is available':'You have the latest version');if(UI.update&&document.querySelector('.sheet [data-act=checkUpd]')&&!document.querySelector('.sheet [data-act=doUpdate]'))document.querySelector('.sheet [data-act=checkUpd]').insertAdjacentHTML('afterend','<button class="btn" data-act="doUpdate">Update now</button>')}
+    if(!document.querySelector('.sheet'))render()}
+  catch(e){if(manual){if(st())st().textContent='';toast('Could not check. Connect to the internet and try again.')}}}
+function startUpdate(){const u=UI.update;if(!u)return;try{Android.downloadUpdate(u.url,u.file);toast('Downloading version '+u.name+'…')}catch(e){try{Android.openUrl(u.url)}catch(_){toast('Could not start the download.')}}}
+window.ppUpdateReady=()=>toast('Download finished. Tap Install, then Open.');
+window.ppUpdateFailed=()=>{toast('Download did not finish. Opening it in your browser instead.');try{Android.openUrl(UI.update.url)}catch(_){}};
+(()=>{const v=appVer();if(!v)return;try{const u=JSON.parse(localStorage.getItem('pp-upd')||'null');if(u&&u.code>v.code)UI.update=u}catch(e){}
+  let last=0;try{last=+localStorage.getItem('pp-upd-checked')||0}catch(e){}
+  if(Date.now()-last>6*3600e3)setTimeout(()=>checkUpdate(false),2500)})();
 
 /* ---------- sheets ---------- */
 function openSheet(html,onMount){$('#sheetRoot').innerHTML=`<div class="scrim" data-act="close"></div><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div>`;const sh=$('.sheet');onMount&&onMount(sh);
@@ -889,6 +909,9 @@ function accForm(id){const a=S.money.accounts.find(x=>x.id===id);const isNew=!a;
    const del=sh.querySelector('#a-del');if(del)del.onclick=()=>used?confirmIn(sh,'This account has records. Move or delete those records first, then delete the account.','OK',()=>sh.querySelector('.confirm').innerHTML=''):confirmIn(sh,'Delete this account?','Delete',()=>{S.money.accounts=S.money.accounts.filter(x=>x.id!==a.id);closeSheet();save('money')})})}
 
 function settingsSheet(){openSheet(`<h3>Settings & backup</h3><div class="form">
+   ${appVer()?`<div class="card"><h2>App version</h2><p class="small muted" style="margin:0 0 10px">You have version <b class="num" style="color:var(--fg)">${esc(appVer().name)}</b>. <span id="upd-status">${UI.update?'Version '+esc(UI.update.name)+' is available.':''}</span></p>
+     <div class="acts"><button class="btn ghost" data-act="checkUpd">Check for updates</button>${UI.update?'<button class="btn" data-act="doUpdate">Update now</button>':''}</div>
+     <p class="small muted" style="margin:8px 0 0">Updating keeps all your data. Checking needs internet; the rest of the app works offline.</p></div>`:''}
    <div class="card"><h2>Where your data lives</h2><p class="small muted" style="margin:0" id="syncNote">${syncText()}</p></div>
    ${window.PP_STANDALONE?'':`<div class="card"><h2>Add to home screen</h2><p class="small muted" style="margin:0">Open this page in your phone browser, tap the menu (⋮ on Android, Share on iPhone), then choose <b>Add to Home screen</b>. It will open like an app.</p></div>`}
    <div class="card"><h2>Backup</h2><p class="small muted" style="margin:0 0 10px">${window.Android?'<b>Share backup</b> sends your data as a file, for example to Google Drive or WhatsApp. To restore, use <b>Open backup file</b>, or copy a backup, tap <b>Paste</b>, then <b>Restore</b>.':'Copy this text and keep it somewhere safe, like a note or email to yourself. Paste it back here to restore.'}</p>
@@ -969,6 +992,8 @@ function onAct(e){const el=e.target.closest('[data-act]');if(!el)return;const a=
   if(a==='editTx'){const ym=el.dataset.ym;const t=(S.tx[ym]||[]).find(t=>t.id===el.dataset.id);if(t&&t.type==='ln')return loanPay(t.loan,null,t,ym);return t&&(t.type==='sv'||t.type==='sw'||isSavTx(t))?savingsForm(t,ym):txForm(t,ym)}
   if(a==='saveIn')return savingsForm(null,null,'in',el.dataset.pot);
   if(a==='potDetail')return potDetail(el.dataset.id);
+  if(a==='checkUpd')return checkUpdate(true);
+  if(a==='doUpdate')return startUpdate();
   if(a==='lf'){UI.lf=el.dataset.v;return render()}
   if(a==='loanDetail')return loanDetail(el.dataset.id);
   if(a==='loanNew')return loanForm(null,el.dataset.dir);
