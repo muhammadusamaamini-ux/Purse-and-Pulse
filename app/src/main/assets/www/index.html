@@ -216,8 +216,8 @@ tr:last-child td{border-bottom:0}
 </div>
 <button class="fab" id="fab" aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 <nav class="tabs"><div class="in">
-  <button class="tab on" data-area="habits"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M8 13l2.5 2.5L16 10"/></svg>Habits</button>
-  <button class="tab" data-area="money"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="3"/><path d="M2 10h20M16 15h2"/></svg>Money</button>
+  <button class="tab on" data-area="money"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="3"/><path d="M2 10h20M16 15h2"/></svg>Money</button>
+  <button class="tab" data-area="habits"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M8 13l2.5 2.5L16 10"/></svg>Habits</button>
   <button class="tab" data-area="tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M3.5 6l1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2"/></svg>Tasks</button>
 </div></nav>
 <div id="sheetRoot"></div>
@@ -254,7 +254,7 @@ function defaultMoney(){
 }
 function defaultTasks(){return{lists:[{id:'l1',name:'Personal',color:COLORS[1]},{id:'l2',name:'Study',color:COLORS[4]},{id:'l3',name:'Work',color:COLORS[0]}],items:[]}}
 let S={habits:{list:[],checks:{}},money:defaultMoney(),tx:{},tasks:defaultTasks()};
-let UI={tab:'habits',tlist:'all',showDone:false,cym:dkey(today()).slice(0,7),csel:dkey(today()),ym:dkey(today()).slice(0,7),rym:dkey(today()).slice(0,7),sync:'local'};
+let UI={tab:'money',tlist:'all',showDone:false,cym:dkey(today()).slice(0,7),csel:dkey(today()),ym:dkey(today()).slice(0,7),rym:dkey(today()).slice(0,7),sync:'local'};
 
 /* ---------- storage: per-person database, with on-device copy ---------- */
 const LKEY='amal-hisaab-v1',OKEY='amal-hisaab-owner';
