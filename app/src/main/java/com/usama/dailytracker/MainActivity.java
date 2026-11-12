@@ -5,6 +5,7 @@ import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
 import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Environment;
 import android.content.ClipData;
@@ -43,6 +44,8 @@ public class MainActivity extends Activity {
     private long updateDownloadId = -1;
     private String updateFileName = null;
     private BroadcastReceiver downloadReceiver;
+    private String pendingOpen = null;
+    private boolean pageReady = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,6 +71,12 @@ public class MainActivity extends Activity {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 return loader.shouldInterceptRequest(request.getUrl());
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                pageReady = true;
+                deliverOpen();
             }
 
             @Override
@@ -99,11 +108,36 @@ public class MainActivity extends Activity {
 
         web.addJavascriptInterface(new Bridge(), "Android");
 
+        takeOpen(getIntent());
         if (savedInstanceState != null) {
             web.restoreState(savedInstanceState);
         } else {
             web.loadUrl(HOME);
         }
+        Reminders.scheduleAll(this);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        takeOpen(intent);
+        deliverOpen();
+    }
+
+    /** A notification or the widget asked to open a certain screen. */
+    private void takeOpen(Intent intent) {
+        if (intent == null) return;
+        String o = intent.getStringExtra("open");
+        if (o != null && !o.isEmpty()) pendingOpen = o;
+        intent.removeExtra("open");
+    }
+
+    private void deliverOpen() {
+        if (!pageReady || pendingOpen == null || web == null) return;
+        String o = pendingOpen.replaceAll("[^A-Za-z0-9:_-]", "");
+        pendingOpen = null;
+        web.evaluateJavascript("setTimeout(function(){window.ppOpen&&ppOpen('" + o + "')},300)", null);
     }
 
     @Override
@@ -140,6 +174,15 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 77 && web != null) {
+            boolean ok = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            web.evaluateJavascript("window.ppNotifResult&&ppNotifResult(" + ok + ")", null);
+        }
+    }
+
+    @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         web.saveState(outState);
@@ -158,6 +201,60 @@ public class MainActivity extends Activity {
 
     /** Small helpers the page can call as window.Android.*. */
     private class Bridge {
+        /** Save the reminder schedule (two JSON lists) and set the alarms. */
+        @JavascriptInterface
+        public void setReminders(String dailyJson, String onceJson) {
+            Reminders.save(MainActivity.this, dailyJson == null ? "[]" : dailyJson, onceJson == null ? "[]" : onceJson);
+        }
+
+        /** "granted", "denied" or "ask" (Android 13+ asks the person once). */
+        @JavascriptInterface
+        public String notifState() {
+            if (Build.VERSION.SDK_INT < 33) {
+                android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                return nm.areNotificationsEnabled() ? "granted" : "denied";
+            }
+            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS") == PackageManager.PERMISSION_GRANTED) return "granted";
+            return getSharedPreferences("pp_reminders", MODE_PRIVATE).getBoolean("asked", false) && !shouldShowRequestPermissionRationale("android.permission.POST_NOTIFICATIONS") ? "denied" : "ask";
+        }
+
+        @JavascriptInterface
+        public void askNotif() {
+            runOnUiThread(() -> {
+                if (Build.VERSION.SDK_INT >= 33) {
+                    getSharedPreferences("pp_reminders", MODE_PRIVATE).edit().putBoolean("asked", true).apply();
+                    requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 77);
+                } else {
+                    openNotifSettings();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void openNotifSettings() {
+            runOnUiThread(() -> {
+                try {
+                    Intent i = new Intent("android.settings.APP_NOTIFICATION_SETTINGS");
+                    i.putExtra("android.provider.extra.APP_PACKAGE", getPackageName());
+                    startActivity(i);
+                } catch (Exception e) {
+                    try {
+                        startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+                    } catch (Exception ignored) { }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void testNotif(String title, String text, String open) {
+            ReminderReceiver.show(MainActivity.this, 999, title, text, open);
+        }
+
+        @JavascriptInterface
+        public void updateWidget(String balance, String sub) {
+            try { BalanceWidget.refresh(MainActivity.this, balance, sub); } catch (Exception ignored) { }
+        }
+
         @JavascriptInterface
         public String appVersionName() {
             try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }

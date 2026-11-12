@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="14dp"
+    android:background="@drawable/widget_bg">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Purse &amp; Pulse"
+        android:textColor="#CCFFFFFF"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/w_balance"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/w_sub"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="#DDFFFFFF"
+        android:textSize="12sp"
+        android:maxLines="2" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/w_exp" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="36dp" android:gravity="center" android:text="− Expense"
+            android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="13sp"
+            android:background="@drawable/widget_btn" />
+        <TextView android:id="@+id/w_inc" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="36dp" android:layout_marginStart="8dp" android:gravity="center" android:text="+ Income"
+            android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="13sp"
+            android:background="@drawable/widget_btn" />
+        <TextView android:id="@+id/w_hab" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="36dp" android:layout_marginStart="8dp" android:gravity="center" android:text="✓ Habits"
+            android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="13sp"
+            android:background="@drawable/widget_btn" />
+    </LinearLayout>
+</LinearLayout>
