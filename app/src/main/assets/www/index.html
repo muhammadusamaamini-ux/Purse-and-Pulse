@@ -204,6 +204,11 @@ tr:last-child td{border-bottom:0}
 .note{font-size:12px;color:var(--muted);text-align:center;padding:6px 0 0}
 .legend{display:flex;flex-direction:column;gap:7px;font-size:13px}
 .legend .row{gap:8px}
+.calcwrap{margin-top:-6px}
+.calcbar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.cb{height:42px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);font-size:20px;font-weight:700;color:var(--fg);padding:0;touch-action:manipulation}
+.cb.eq{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.calcres{min-height:18px;margin-top:4px;font-weight:600}
 .icb{width:44px;height:44px;border-radius:12px;border:2px solid transparent;background:var(--surface2);font-size:22px;display:grid;place-items:center;padding:0}
 .icb.on{border-color:var(--accent);background:var(--accent-soft)}
 #lock{position:fixed;inset:0;z-index:100;background:var(--bg);display:grid;place-items:center;padding:24px}
@@ -563,8 +568,30 @@ window.ppUpdateFailed=()=>{toast('Download did not finish. Opening it in your br
   let last=0;try{last=+localStorage.getItem('pp-upd-checked')||0}catch(e){}
   if(Date.now()-last>6*3600e3)setTimeout(()=>checkUpdate(false),2500)})();
 
+
+/* ---------- calculator in amount boxes: 200+300+450 ---------- */
+function calcEval(src){const s=String(src).replace(/,/g,'').replace(/[×xX]/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/\s+/g,'');
+  if(!s)return null;if(!/^[0-9.+\-*/()]+$/.test(s))return NaN;let i=0;
+  const num=()=>{const m=s.slice(i).match(/^\d*\.?\d+|^\d+\./);if(!m)throw 0;i+=m[0].length;return parseFloat(m[0])};
+  const fac=()=>{if(s[i]==='-'){i++;return -fac()}if(s[i]==='+'){i++;return fac()}if(s[i]==='('){i++;const v=add();if(s[i]!==')')throw 0;i++;return v}return num()};
+  const mul=()=>{let v=fac();while(s[i]==='*'||s[i]==='/'){const o=s[i++];const r=fac();v=o==='*'?v*r:v/r}return v};
+  const add=()=>{let v=mul();while(s[i]==='+'||s[i]==='-'){const o=s[i++];const r=mul();v=o==='+'?v+r:v-r}return v};
+  try{const v=add();if(i!==s.length||!isFinite(v))return NaN;return Math.round(v*100)/100}catch(e){return NaN}}
+function enhanceCalc(sh){sh.querySelectorAll('#t-amt,#s-amt,#ln-a,#lp-a,#r-a').forEach(inp=>{if(inp.dataset.calc)return;inp.dataset.calc='1';
+  inp.type='text';inp.setAttribute('inputmode','decimal');inp.setAttribute('autocomplete','off');inp.removeAttribute('min');inp.removeAttribute('step');
+  const host=inp.closest('label')||inp;const bar=document.createElement('div');bar.className='calcwrap';
+  bar.innerHTML=`<div class="calcbar">${['+','−','×','÷','(',')'].map(o=>`<button type="button" class="cb" data-op="${o}" aria-label="${{'+':'plus','−':'minus','×':'times','÷':'divide','(':'open bracket',')':'close bracket'}[o]}">${o}</button>`).join('')}<button type="button" class="cb eq" data-op="=" aria-label="equals">=</button></div><div class="calcres small muted" aria-live="polite"></div>`;
+  host.after(bar);const res=bar.querySelector('.calcres');
+  const show=()=>{const v=inp.value;if(!/[+\-*/×÷−()]/.test(v.replace(/^-/,''))){res.textContent='';return}const r=calcEval(v);res.textContent=r==null?'':isNaN(r)?'Finish the sum, for example 200+300':'= '+fmt(r);res.className='calcres small '+(isNaN(r)?'exp':'inc')};
+  inp.addEventListener('input',show);
+  bar.querySelectorAll('[data-op]').forEach(b=>{b.addEventListener('mousedown',e=>e.preventDefault());b.addEventListener('touchstart',e=>{e.preventDefault();b.click()},{passive:false});
+    b.addEventListener('click',()=>{const o=b.dataset.op;if(o==='='){const r=calcEval(inp.value);if(r!=null&&!isNaN(r)){inp.value=String(r);res.textContent=''}else show()}
+      else{const st=inp.selectionStart??inp.value.length,en=inp.selectionEnd??inp.value.length;inp.setRangeText(o,st,en,'end');show()}inp.focus()})});
+  const form=inp.closest('form');if(form)form.addEventListener('submit',e=>{const v=inp.value;if(!/[+\-*/×÷−()]/.test(v.replace(/^-/,'')))return;const r=calcEval(v);
+    if(r==null||isNaN(r)){e.preventDefault();e.stopImmediatePropagation();show();inp.focus();return}inp.value=String(r)},true)})}
+
 /* ---------- sheets ---------- */
-function openSheet(html,onMount){$('#sheetRoot').innerHTML=`<div class="scrim" data-act="close"></div><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div>`;const sh=$('.sheet');onMount&&onMount(sh);
+function openSheet(html,onMount){$('#sheetRoot').innerHTML=`<div class="scrim" data-act="close"></div><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div>`;const sh=$('.sheet');onMount&&onMount(sh);enhanceCalc(sh);
   /* put Cancel and Add/Save at the top, where the keyboard never covers them */
   const a=[...sh.querySelectorAll('form .acts')].find(x=>x.querySelector(':scope > [type=submit]'));if(a){a.closest('form').prepend(a);a.classList.add('top');const er=sh.querySelector('form p.exp[id$="-err"]');if(er)a.after(er)}}
 /* ---------- back button: every view and open screen is a step in history ---------- */
@@ -649,7 +676,7 @@ function txForm(t,ym){const isNew=!t;t=t?{...t}:{type:UI.newType||'exp',amt:'',c
   const accOpts=sel=>S.money.accounts.map(a=>`<option value="${a.id}" ${a.id===sel?'selected':''}>${esc(a.name)}</option>`).join('');
   openSheet(`<h3>${isNew?'Add record':'Edit record'}</h3><form class="form" id="tf">
     <div class="seg" id="t-type"><button type="button" data-v="exp">Expense</button><button type="button" data-v="inc">Income</button><button type="button" data-v="tr">Transfer</button></div>
-    <label class="field"><span>Amount${S.money.cur?' ('+esc(S.money.cur)+')':''}</span><input class="inp amount num" id="t-amt" type="number" min="0" step="any" inputmode="decimal" required value="${t.amt}" placeholder="0"></label>
+    <label class="field"><span>Amount${(S.money.cur??'Rs')?' ('+esc(S.money.cur??'Rs')+')':''}</span><input class="inp amount num" id="t-amt" type="number" min="0" step="any" inputmode="decimal" required value="${t.amt}" placeholder="0"></label>
     <div id="t-cats"></div>
     <div class="row" id="t-newcat" hidden><input class="inp" maxlength="30" placeholder="New category name"><button type="button" class="btn sm" id="t-addcat">Add</button></div>
     <div class="two"><label class="field"><span id="t-acc-l">Paid from</span><select class="inp" id="t-acc">${accOpts(t.acc)}</select></label><label class="field"><span>Date</span><input class="inp" type="date" id="t-date" value="${t.date}" required></label></div>
